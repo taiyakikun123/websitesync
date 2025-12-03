@@ -1,0 +1,197 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #1a1a1a;
+      color: white;
+      font-family: sans-serif;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* 左：操作用（大） */
+    .left-main {
+      flex: 1;
+      padding: 10px;
+      box-sizing: border-box;
+      background: #222;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .left-main h2 {
+      margin: 0;
+    }
+
+    #mainFrame {
+      flex: 1;
+      width: 100%;
+      border: 3px solid #4CAF50;
+      border-radius: 6px;
+      background: white;
+    }
+
+    /* 右：14個の小iframe */
+    .right-list {
+      width: 420px;
+      padding: 10px;
+      background: #181818;
+      box-sizing: border-box;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .box {
+      position: relative;
+      background: #111;
+      padding: 0;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .box iframe {
+      width: 100%;
+      height: 200px;
+      border: 1px solid #444;
+      background: white;
+      pointer-events: none;
+    }
+
+    .label {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      padding: 2px 6px;
+      background: rgba(0,0,0,0.7);
+      font-size: 10px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="left-main">
+    <div style="display:flex; gap:8px; margin-bottom:8px;">
+      <input id="urlInput" placeholder="https://example.com" style="flex:1; padding:8px; font-size:14px; border-radius:4px; border:2px solid #444; background:#333; color:white;">
+      <button onclick="loadURL()" style="padding:8px 14px; background:#4CAF50; border:none; border-radius:4px; cursor:pointer;">開く</button>
+    </div>
+    <h2>🎮 操作用（左）→ 右14個に同期</h2>
+    <iframe id="mainFrame"></iframe>
+  </div>
+
+  <div class="right-list" id="rightList"></div>
+
+<script>
+const mainFrame = document.getElementById("mainFrame");
+const rightList = document.getElementById("rightList");
+let IFRAME_COUNT = 14; // ★ここを変えるだけで数変更できます
+const smallFrames = [];
+
+/* iframe 内部ページ（同期処理付き） */
+const makeContent = (isMain, id) => `
+<!doctype html>
+<html>
+<head>
+  <style>
+    body { margin:0; padding:20px; background:#446; color:white; min-height:200vh; font-family:sans-serif; }
+    button { padding:10px 20px; margin:5px; }
+  </style>
+</head>
+<body>
+  <h2>${isMain ? '操作側' : '同期側 #' + id}</h2>
+  <button id="btnA">A</button>
+  <button id="btnB">B</button>
+
+  <script>
+    const isMain = ${isMain};
+    function send(msg){ parent.postMessage(msg, '*'); }
+
+    if (isMain) {
+      window.addEventListener('scroll', ()=>{
+        const max = document.documentElement.scrollHeight - innerHeight;
+        const frac = scrollY / max;
+        send({type:'scroll', value: frac});
+      });
+
+      document.getElementById('btnA').onclick = ()=>send({type:'button', id:'btnA'});
+      document.getElementById('btnB').onclick = ()=>send({type:'button', id:'btnB'});
+    }
+
+    // 同期受け取り
+    window.addEventListener('message', ev =>{
+      const msg = ev.data;
+      if (msg.type === 'scrollSync'){
+        const max = document.documentElement.scrollHeight - innerHeight;
+        scrollTo(0, max * msg.value);
+      }
+      if (msg.type === 'buttonSync'){
+        const b = document.getElementById(msg.id);
+        if (b){ b.style.background = '#ff0'; setTimeout(()=>b.style.background='',200); }
+      }
+    });
+  <\/script>
+</body>
+</html>`;
+
+/* メインiframeを作成 */
+mainFrame.srcdoc = makeContent(true, 0);
+
+/* 右側14 iframe生成 */
+for (let i = 1; i <= IFRAME_COUNT; i++){
+  const wrap = document.createElement('div');
+  wrap.className = 'box';
+
+  const label = document.createElement('div');
+  label.className = 'label';
+  label.textContent = '#' + i;
+
+  const f = document.createElement('iframe');
+  f.srcdoc = makeContent(false, i);
+
+  wrap.appendChild(label);
+  wrap.appendChild(f);
+  rightList.appendChild(wrap);
+  smallFrames.push(f);
+}
+
+/* メイン → 小iframeへ同期 */
+window.addEventListener('message', ev =>{
+  if (ev.source !== mainFrame.contentWindow) return;
+  const msg = ev.data;
+
+  smallFrames.forEach(f =>{
+    f.contentWindow.postMessage(
+      msg.type === 'scroll' ? {type:'scrollSync', value:msg.value}
+      : msg.type === 'button' ? {type:'buttonSync', id:msg.id}
+      : msg,
+      '*'
+    );
+  });
+});
+
+function loadURL(){
+  const url = document.getElementById('urlInput').value.trim();
+  if(!url) return;
+  const u = url.startsWith('http') ? url : 'https://' + url;
+  mainFrame.src = u;
+  smallFrames.forEach(f=> f.src = u);
+}
+
+document.getElementById('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    loadURL();
+  }
+});
+
+</script>
+</body>
+</html>
