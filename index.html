@@ -192,6 +192,39 @@ document.getElementById('urlInput').addEventListener('keydown', e => {
   }
 });
 
+// --- improved loader & diagnostics ---
+function loadURL(){
+  const url = document.getElementById('urlInput').value.trim();
+  if(!url) return;
+  const u = url.startsWith('http') ? url : 'https://' + url;
+  console.log('[sync-iframes] loading URL ->', u);
+
+  // remove srcdoc so the browser can navigate to an external URL reliably
+  try{ if (mainFrame.hasAttribute('srcdoc')) mainFrame.removeAttribute('srcdoc'); }catch(e){/*ignore*/}
+  mainFrame.src = u;
+
+  // 同期フレームも同様に切り替え
+  smallFrames.forEach(f=>{
+    try{ if (f.hasAttribute('srcdoc')) f.removeAttribute('srcdoc'); }catch(e){}
+    try{ f.src = u; }catch(err){ console.error('failed set src on small frame', err); }
+  });
+}
+
+// Enterで親を遷移させない（デフォルトを止めて iframe に読み込む）
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const el = document.activeElement;
+    if (el && el.id === 'urlInput') {
+      e.preventDefault();
+      loadURL();
+    }
+  }
+});
+
+// iframe load/error handlers for debugging
+mainFrame.addEventListener('load', ()=>console.log('[sync-iframes] main loaded', mainFrame.src));
+mainFrame.addEventListener('error', ()=>console.error('[sync-iframes] main load error', mainFrame.src));
+
 </script>
 </body>
 </html>
